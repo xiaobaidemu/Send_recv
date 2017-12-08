@@ -1,0 +1,1 @@
+g++ -o net.o -c net.cpp

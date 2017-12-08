@@ -1,0 +1,14 @@
+CC = g++
+SRCS = net.cpp test.cpp
+OPTS = -m64 -std=c++11 -w
+OBJS = $(SRCS:.cpp=.o)
+LIB = -lpthread
+EXEC = test
+start:$(OBJS)
+	$(CC) $(OPTS) -o $(EXEC) $(OBJS) $(LIB)
+.cpp.o:
+	$(CC) $(OPTS) -o $@ -c $<
+
+clean:
+	rm -f test
+	rm -f $(OBJS)
