@@ -889,6 +889,6 @@ void WorkerNetwork::send_partmsg(int efd, char* sendmsg, int totalsize_s, int re
     else if(sendsize < restsendsize)//change buufer_send & modify_event epollout
     {
         setsockdata_s(SD[destofrank], sendmsg + sendsize, totalsize_s,  restsendsize - sendsize, handle_s, tag_s);
-        printf("[pid:%d] send_partmsg: have sendsize = %d\n", totalsize_s - restsendsize + sendsize);
+        printf("[pid:%d] send_partmsg: have sendsize = %d\n",pid, totalsize_s - restsendsize + sendsize);
     }
 }
