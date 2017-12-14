@@ -356,6 +356,8 @@ int WorkerNetwork::comm_init(){
 	setup_to_accept(workerip, worker_listenport);
 	tree_connect();
 	pthread_mutex_init(&wmutex, NULL);
+     
+	efd = epoll_create(FD_SIZE);
 	pthread_create(&wthread, NULL, _run_thread, this);
 	//上面这个需要修改
 	printf("Worker %s have finished comm_init.\n", workerip);
@@ -432,6 +434,7 @@ void WorkerNetwork::handshake(int rank){
 	if(sc_list[rank] == -1){
 		new_st = connectserver(phonebook[rank].wip, rank + WORKER_LISTEN_PORT);
 		send_handshake_id(rank, new_st);
+        
 		if(rank == C.rank){//自己和自己握手
 			sc_list[rank] = new_st;
 			SD[rank] = initsockdata(C.rank);
@@ -441,6 +444,7 @@ void WorkerNetwork::handshake(int rank){
 			read_env(new_st, &env);
 			rc_list[rank] = sc_list[rank] = new_st;
 			SD[rank] = initsockdata(rank);
+		    event_op(efd, new_st, SD[rank], EPOLLIN, ADD);
 		}
 		safecall(make_socket_non_blocking(new_st));
 		printf("[pid:%d] handshake with %d finished.\n", pid, rank);
@@ -534,7 +538,7 @@ void WorkerNetwork::print_queue(list<msg*> &queue){
 int WorkerNetwork::comm_recv(void *buf, int count, int src, int tag, comm_status *status){
 	int i; msg tofind;
 	IT retpos;
-    sleep(2);
+    //sleep(2);
 	printf("[pid:%d] begin recv from %d, tag %d\n", pid, src, tag);	
 	while(rc_list[src] == -1){}
 	setmsg(tofind, src, NA, tag, NON_SYS, NA);
@@ -667,7 +671,7 @@ void WorkerNetwork::comm_thread(){
     printf("[pid%d] IN THREAD begin thread.\n", pid);
 	int i, j, rc, n, destrank, printime = 0, new_st;
 	struct epoll_event event, *events;
-	efd = epoll_create(FD_SIZE);
+	//efd = epoll_create(FD_SIZE);
 	events = (struct epoll_event*)calloc(MAXEVENTS, sizeof(struct epoll_event));
 	sockdata default_sd = {-listen_st-1, NULL, NULL, NULL, 0, 0, -1, 0, -1,-1};
 	event.data.ptr = &default_sd; event.events = EPOLLIN;
@@ -685,7 +689,7 @@ void WorkerNetwork::comm_thread(){
                 int index = ((sockdata*)(events[i].data.ptr))->rank;
                 event_op(efd, rc_list[index], SD[index], EPOLLOUT|EPOLLIN, DEL);
                 printf("[pid:%d] EPOLLERR/EPOLLHUP pid = %d\n",pid, index);
-				continue;
+				//continue;
 			}
 			else if(((sockdata*)(events[i].data.ptr))->rank < 0 && (events[i].events & EPOLLIN)){
 				msg* hsEnv = (msg*)malloc(sizeof(msg));
@@ -702,6 +706,8 @@ void WorkerNetwork::comm_thread(){
 						SD[hsEnv->src] = initsockdata(hsEnv->src);
 						event_op(efd, new_st, SD[hsEnv->src], EPOLLIN, ADD);
 						send_sys_msg(hsEnv->src, 0, RECV_OK, 0, NULL);
+                        //if(pid == 3 && hsEnv->src == 1)
+                        if(pid == 3)printf("========================================================pid %d,src=%d\n", pid, hsEnv->src);
 					}
 					printf("[pid:%d] complete handshake with pid %d.\n", pid, hsEnv->src);
 				}
@@ -715,6 +721,10 @@ void WorkerNetwork::comm_thread(){
 				printf("[pid:%d] now (events[i].events & EPOLLIN): events[%d].events = %d\n", pid, i, events[i].events);
 				sockdata* ptr = (sockdata*)(events[i].data.ptr);
 				int srcrank = ptr->rank, readsize;
+                if(srcrank == 1 && pid == 2){
+                    printf("++++++++++++++++++++++++++++++++++\n");
+                    printf("++++++++++++++++++++++++++++++++++\n");
+                }
 				//首先读取50字节的消息头
 				if(ptr->totalsize_r == -1){
 					char *head;//!!!!!!!!!!!!!must to free
@@ -724,9 +734,9 @@ void WorkerNetwork::comm_thread(){
 					printf("[pid:%d] try reading (head) from srcrank=%d\n", pid, srcrank);
 					readsize = read(rc_list[srcrank], head, 50 - recvheadsize);
                     if(readsize < 0) {
-						if (errno == EAGAIN) { continue; }
-                        printf("[pid:%d] exit read head readsize<0 error:%s\n", pid, strerror(errno));
-                        exit(99);
+						if (errno == EAGAIN || errno == EINTR)
+                            printf("[pid:%d] exit read head readsize<0 error:%s\n", pid, strerror(errno));
+                        else exit(99);
                     }
 						//dealrecvzero(recv_msg_q, srcrank, head, NULL, recvheadsize);
 					else if(readsize == 0){
@@ -841,7 +851,7 @@ void WorkerNetwork::comm_thread(){
                         if(destofrank != C.rank)
                             event_op(efd, sc_list[destofrank], SD[destofrank], EPOLLIN | EPOLLOUT, MOD);
                         else
-                            event_op(efd, sc_list[destofrank], SD[destofrank], EPOLLOUT, ADD);
+                            event_op(efd, sc_list[destofrank], SD[destofrank], EPOLLOUT|EPOLLIN, ADD);
                     } 	
                 }
                 else if(sendsize == totalsize){
@@ -856,7 +866,7 @@ void WorkerNetwork::comm_thread(){
                     if(destofrank != C.rank)
                         event_op(efd, sc_list[destofrank], SD[destofrank], EPOLLIN | EPOLLOUT, MOD);
                     else
-                        event_op(efd, sc_list[destofrank], SD[destofrank], EPOLLOUT, ADD);
+                        event_op(efd, sc_list[destofrank], SD[destofrank], EPOLLOUT | EPOLLIN, ADD);
                     printf("[pid:%d] have send part size = %d\n", pid, sendsize);
                 }
                 if(msgPtr) {free(msgPtr); msgPtr=NULL;}
