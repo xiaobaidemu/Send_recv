@@ -497,7 +497,7 @@ int WorkerNetwork::comm_isend(void *buf, int count, int dest, int tag, comm_requ
 	handshake(dest);
 	pthread_mutex_lock(&wmutex);
 	*handle = req_index;
-	req_handles[req_index++];
+	req_handles[req_index++]=0;
 	pthread_mutex_unlock(&wmutex);
 	msg *msgEnv, *isendEnv;
 
@@ -521,15 +521,27 @@ int WorkerNetwork::comm_isend(void *buf, int count, int dest, int tag, comm_requ
 	return 0;
 }
 
+void WorkerNetwork::print_queue(list<msg*> &queue){
+    pthread_mutex_lock(&wmutex);
+    IT pos = queue.begin();int i = 0;
+    for(pos;pos != queue.end();pos++){
+        msg * m = (*pos);
+        printf("----> element%d. s:%d t:%d d:%d \n",i, m->src, m->tag, m->dest);
+        i++;
+    }
+    pthread_mutex_unlock(&wmutex);
+}
 int WorkerNetwork::comm_recv(void *buf, int count, int src, int tag, comm_status *status){
 	int i; msg tofind;
 	IT retpos;
+    sleep(2);
 	printf("[pid:%d] begin recv from %d, tag %d\n", pid, src, tag);	
 	while(rc_list[src] == -1){}
 	setmsg(tofind, src, NA, tag, NON_SYS, NA);
     printf("[pid:%d] start find env s:%d d:%d t:%d sys:%d sz:%d.\n", 
             pid, src, NA, tag, NON_SYS, NA);
     printf("========queue size recv_msg_q:%d\n", recv_msg_q.size());
+    print_queue(recv_msg_q);
 	retpos = queue_find(recv_msg_q, tofind);
     printf("[pid:%d] have finished comm_recv queue_find.\n", pid);
 	memmove(buf, (*retpos)->msg, (*retpos)->size);
@@ -589,7 +601,7 @@ void WorkerNetwork::setmsg(msg &tofind, int src, int dest, int tag, int sys, int
 }
 //此处可以修改为使用信号量进行控制的查询
 //表示的意思是在找到消息后，并删除
-IT WorkerNetwork::queue_find(deque<msg*> &msg_queue, msg &m){
+IT WorkerNetwork::queue_find(list<msg*> &msg_queue, msg &m){
 	IT pos; int flag = 1;
 	while(flag){
 		pthread_mutex_lock(&wmutex);
@@ -603,7 +615,7 @@ IT WorkerNetwork::queue_find(deque<msg*> &msg_queue, msg &m){
 	return pos;
 }
 
-int WorkerNetwork::asynch_queue_find(IT &pos, deque<msg*> &msg_queue, msg &m){
+int WorkerNetwork::asynch_queue_find(IT &pos, list<msg*> &msg_queue, msg &m){
 	IT tmppos;
 	int rt = 0;
 	pthread_mutex_lock(&wmutex);
@@ -623,7 +635,7 @@ void WorkerNetwork::process(int sys){
 	if(sys == BARRIER) act_barrier_msg++;
 	else if(sys == BARRIER_GO) act_barrier_go++;
 }
-void WorkerNetwork::dealrecvzero(deque<msg*> &msg_queue, int srcrank, void* buff1, void* buff2, int recvsize){
+void WorkerNetwork::dealrecvzero(list<msg*> &msg_queue, int srcrank, void* buff1, void* buff2, int recvsize){
 	if(errno != EAGAIN){
         printf("[pid:%d] dealrecvzero errno = %s.\n",pid, strerror(errno));
 		msg toFind; IT pos;
