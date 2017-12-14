@@ -24,7 +24,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <vector>
-#include <deque>
+#include <list>
 #include <algorithm>
 #include <pthread.h>
 #define MAX_NUM_IP 1024
@@ -34,7 +34,7 @@
 #define COMM_SUCCESS     0 
 
 using std::vector;
-using std::deque;
+using std::list;
 enum {
 	NON_SYS	   = 0,	RECV_OK    = 1, HANDSHAKE  = 2, ISEND      = 3,
 	SEND_REQ   = 4, BARRIER	   = 6, BARRIER_GO = 7, IRECV	   = 10,
@@ -62,7 +62,7 @@ typedef struct m{
 //m1代表队列中的msg指针，m2代表被查询的msg
 //这个还需要修改
 bool cmp(const msg* m1, const msg* m2);
-typedef deque<msg*>::iterator IT;
+typedef list<msg*>::iterator IT;
 class Network{
 public:
     struct phoneinfo{
@@ -138,8 +138,8 @@ private:
 	int act_isends;
 	int act_irecvs;
 	vector<int> req_handles;
-	deque<msg*> send_msg_q;
-	deque<msg*> recv_msg_q;
+	list<msg*> send_msg_q;
+	list<msg*> recv_msg_q;
 	int to_masterfd;
 	int done;
 	int act_barrier_msg;
@@ -153,11 +153,11 @@ private:
 	int read_env(int fd, msg *env);
 	void setmsg(msg &tofind, int src, int dest, int tag, int sys, int size);
 	void send_sys_msg(int dest, int tag, int sys, int size, const char *buf);
-	IT queue_find(deque<msg*> &msg_queue, msg &m);
-	int asynch_queue_find(IT &pos, deque<msg*> &msg_queue, msg &m);
-	void dealrecvzero(deque<msg*> &msg_queue, int srcrank, void* buff1, void* buff2, int recvsize);
+	IT queue_find(list<msg*> &msg_queue, msg &m);
+	int asynch_queue_find(IT &pos, list<msg*> &msg_queue, msg &m);
+	void dealrecvzero(list<msg*> &msg_queue, int srcrank, void* buff1, void* buff2, int recvsize);
 	void setsockdata_s(sockdata* sd, char* buffer_send, int totalsize_s, int restsendsize, int handle_s, int tag_s);
-    //void print_queue();
+    void print_queue(list<msg*> &queue);
 	void setsockdata_r(sockdata* sd, char* totalbuff, char* buffer_recv, int totalsize_r, int haverecvsize);
 	void process(int sys);
     void send_partmsg(int efd, char* sendmsg, int totalsize_s, int restsendsize, int destofrank, int handle_s, int tag_s );
