@@ -1,5 +1,5 @@
 CC = g++
-SRCS = net.cpp test.cpp
+SRCS = net.cpp test2.cpp
 OPTS = -m64 -std=c++11 -w
 OBJS = $(SRCS:.cpp=.o)
 LIB = -lpthread

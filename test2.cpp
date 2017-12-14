@@ -1,6 +1,8 @@
+
 #include "net.h"
 #include <string.h>
 #include <stdlib.h>
+#include <thread>
 
 #define SIZE (1024*1024*1024)
 void test_Isend_recv(const char* masterip, int masterport, int maxpid);
@@ -9,22 +11,25 @@ void test_Big(const char* masterip, int masterport, int maxpid);
 void test_alltoall_small(const char* masterip, int masterport, int maxpid);
 
     
-int main(int argc, const char * argv[]){
+int main(int argc, const char * argv[]) {
 	int masterport = 8800;
 	int maxpid = 4;
-	const char * masterip = "127.0.0.1";
-	for(int i = 1;i < argc;++i){
-		if(strcmp(argv[i], "master") == 0){
-			MasterNetwork master(masterip, masterport, maxpid, 60);
-		}
-		else{
-            //test_Isend_Irecv(masterip, masterport, maxpid);
-			//test_Isend_recv(masterip, masterport, maxpid);
-            //test_Big(masterip, masterport, maxpid);
-			test_alltoall_small(masterip, masterport, maxpid);
-		}
+    const char * masterip = "127.0.0.1";
+    std::thread thr_master([&]() {
+        MasterNetwork master(masterip, masterport, maxpid, 60);
+    });
+    std::vector<std::thread> thr_workers(maxpid);
+    for (auto& t: thr_workers) {
+        t = std::thread([&]() {
+            test_alltoall_small(masterip, masterport, maxpid);
+        });
+    }
 
-	}
+    for (auto& t: thr_workers) {
+        t.join();
+    }
+    thr_master.join();
+        
 	return 0;
 }
 
@@ -154,3 +159,4 @@ void test_alltoall_small(const char* masterip, int masterport, int maxpid){
 	// free(tmprecv);
 	printf("[pid:%d] ========== exit =========\n", myrank);
 }
+

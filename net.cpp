@@ -554,8 +554,8 @@ int WorkerNetwork::comm_recv(void *buf, int count, int src, int tag, comm_status
 	//将找到这个msg,删除并释放内存，此处要注意
 	//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!free
 	//free 注意一定要有free操作
-	recv_msg_q.erase(retpos);
 	msg* delmsg = *retpos;
+	recv_msg_q.erase(retpos);
 	if(delmsg->msg) free(delmsg->msg);
     if(delmsg) {free(delmsg); delmsg = NULL;}
 	pthread_mutex_unlock(&wmutex);
@@ -718,9 +718,10 @@ void WorkerNetwork::comm_thread(){
 					int recvheadsize = ptr->haverecvsize;
 					if(ptr->buffer_recv == NULL) head = (char*)malloc(50);
 					else head = ptr->buffer_recv;
+					printf("[pid:%d] try reading (head) from srcrank=%d\n", pid, srcrank);
 					readsize = read(rc_list[srcrank], head, 50 - recvheadsize);
                     if(readsize < 0){
-                        printf("[pid:%d] exit read head readsize<0 error:%s\n", strerror(errno));
+                        printf("[pid:%d] exit read head readsize<0 error:%s\n", pid, strerror(errno));
                         exit(99);
                     }
 						//dealrecvzero(recv_msg_q, srcrank, head, NULL, recvheadsize);
@@ -777,9 +778,10 @@ void WorkerNetwork::comm_thread(){
 					char* _msg = ptr->buffer_recv;
                     int totalsize_r = ptr->totalsize_r;
                     int recvmsgsize = ptr->haverecvsize;
+					printf("[pid:%d] try reading (body) from srcrank=%d\n", pid, srcrank);
                     int readsize = read(rc_list[srcrank], _msg, totalsize_r - recvmsgsize);    
                     if(readsize < 0){
-                        printf("[pid:%d] exit read left readsize<0 error:%s\n", strerror(errno));
+                        printf("[pid:%d] exit read head readsize<0 error:%s\n", pid, strerror(errno));
                         exit(99);
                     }
                         //dealrecvzero(recv_msg_q, srcrank, _msg, ptr->buffer_recv_withead, recvmsgsize);
