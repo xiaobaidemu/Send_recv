@@ -17,6 +17,7 @@ int main(int argc, const char * argv[]) {
     const char * masterip = "127.0.0.1";
     std::thread thr_master([&]() {
         MasterNetwork master(masterip, masterport, maxpid, 60);
+        printf("------------------------- master exit -------------------------\n");
     });
     std::vector<std::thread> thr_workers(maxpid);
     for (auto& t: thr_workers) {
@@ -29,7 +30,7 @@ int main(int argc, const char * argv[]) {
         t.join();
     }
     thr_master.join();
-        
+
 	return 0;
 }
 

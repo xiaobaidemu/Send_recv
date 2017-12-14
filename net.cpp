@@ -592,7 +592,9 @@ int WorkerNetwork::comm_test(comm_request *rq, int *flag, comm_status* status){
 
 int WorkerNetwork::comm_wait(comm_request *rq){
 	printf("[pid:%d] MPI_wait on %d.\n", pid, *rq);
-	while(!req_handles[*rq]){}
+	while(!req_handles[*rq]) {
+		sched_yield();
+	}
 	return 0;
 }
 void WorkerNetwork::setmsg(msg &tofind, int src, int dest, int tag, int sys, int size){
@@ -709,7 +711,8 @@ void WorkerNetwork::comm_thread(){
 				safecall(make_socket_non_blocking(new_st));
 				if(hsEnv) {free(hsEnv);hsEnv = NULL;}
 			}
-			else if(events[i].events & EPOLLIN){
+			else if(events[i].events & EPOLLIN) {
+				printf("[pid:%d] now (events[i].events & EPOLLIN): events[%d].events = %d\n", pid, i, events[i].events);
 				sockdata* ptr = (sockdata*)(events[i].data.ptr);
 				int srcrank = ptr->rank, readsize;
 				//首先读取50字节的消息头
@@ -720,7 +723,8 @@ void WorkerNetwork::comm_thread(){
 					else head = ptr->buffer_recv;
 					printf("[pid:%d] try reading (head) from srcrank=%d\n", pid, srcrank);
 					readsize = read(rc_list[srcrank], head, 50 - recvheadsize);
-                    if(readsize < 0){
+                    if(readsize < 0) {
+						if (errno == EAGAIN) { continue; }
                         printf("[pid:%d] exit read head readsize<0 error:%s\n", pid, strerror(errno));
                         exit(99);
                     }
@@ -781,6 +785,7 @@ void WorkerNetwork::comm_thread(){
 					printf("[pid:%d] try reading (body) from srcrank=%d\n", pid, srcrank);
                     int readsize = read(rc_list[srcrank], _msg, totalsize_r - recvmsgsize);    
                     if(readsize < 0){
+						if (errno == EAGAIN) { continue; }
                         printf("[pid:%d] exit read head readsize<0 error:%s\n", pid, strerror(errno));
                         exit(99);
                     }
