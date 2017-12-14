@@ -147,6 +147,6 @@ void test_alltoall_small(const char* masterip, int masterport, int maxpid){
 		printf("%s", allrecv); allrecv += 50;
 	}
 	sleep(5);
-	free(reqs);
-	free(tmprecv);
+	//free(reqs);
+	//free(tmprecv);
 }
