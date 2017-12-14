@@ -2,14 +2,16 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define SIZE (1024*1024*64)
+#define SIZE (1024*1024*1024)
 void test_Isend_recv(const char* masterip, int masterport, int maxpid);
 void test_Isend_Irecv(const char* masterip, int masterport, int maxpid);
 void test_Big(const char* masterip, int masterport, int maxpid);
+void test_alltoall_small(const char* masterip, int masterport, int maxpid);
+
     
 int main(int argc, const char * argv[]){
 	int masterport = 8800;
-	int maxpid = 2;
+	int maxpid = 4;
 	const char * masterip = "127.0.0.1";
 	for(int i = 1;i < argc;++i){
 		if(strcmp(argv[i], "master") == 0){
@@ -18,7 +20,8 @@ int main(int argc, const char * argv[]){
 		else{
             //test_Isend_Irecv(masterip, masterport, maxpid);
 			//test_Isend_recv(masterip, masterport, maxpid);
-            test_Big(masterip, masterport, maxpid);
+            //test_Big(masterip, masterport, maxpid);
+			test_alltoall_small(masterip, masterport, maxpid);
 		}
 
 	}
@@ -112,4 +115,38 @@ void test_Big(const char* masterip, int masterport, int maxpid){
         worker.comm_wait(&rq_send1);
         printf("[PID:%d] have send the whole data.\n", myrank);
     }
+}
+
+void test_alltoall_small(const char* masterip, int masterport, int maxpid){	
+    WorkerNetwork worker(masterip, masterport, maxpid);
+	worker.comm_init();
+    int myrank = worker.get_rank(); int size = worker.get_comm_size();
+    printf("[pid:%d] myrank is &d in %d process\n", worker.pid, myrank, size);
+	char sendmsg[50];
+	char *allrecv = (char*)calloc(50*size, 1);
+	char *tmprecv = allrecv;
+	sprintf(sendmsg, "!!!!!!!!!!!!!! It is rank %d.!!!!!!!!!!!!\n", myrank);
+	comm_request *reqs = (comm_request*)malloc(size*sizeof(comm_request));
+	for(int i = 0;i < size;i++){
+		worker.comm_isend(sendmsg, 50, i, myrank, &reqs[i]);
+	}
+	for(int i=0;i < size;i++){
+		comm_status status;
+		worker.comm_recv(allrecv, 50, i, i, &status);
+		printf("[pid:%d] recv msg from %d. msg is %s", myrank, i, allrecv);
+		allrecv += 50;
+
+	}
+	for(int i = 0;i < size;i++){
+		worker.comm_wait(&reqs[i]);
+	}
+
+	printf("*************************\n");
+	allrecv = tmprecv;
+	for(int i = 0;i < size;i++){
+		printf("%s", allrecv); allrecv += 50;
+	}
+	sleep(5);
+	free(reqs);
+	free(tmprecv);
 }

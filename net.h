@@ -157,6 +157,7 @@ private:
 	int asynch_queue_find(IT &pos, deque<msg*> &msg_queue, msg &m);
 	void dealrecvzero(deque<msg*> &msg_queue, int srcrank, void* buff1, void* buff2, int recvsize);
 	void setsockdata_s(sockdata* sd, char* buffer_send, int totalsize_s, int restsendsize, int handle_s, int tag_s);
+    //void print_queue();
 	void setsockdata_r(sockdata* sd, char* totalbuff, char* buffer_recv, int totalsize_r, int haverecvsize);
 	void process(int sys);
     void send_partmsg(int efd, char* sendmsg, int totalsize_s, int restsendsize, int destofrank, int handle_s, int tag_s );

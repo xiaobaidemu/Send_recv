@@ -529,6 +529,7 @@ int WorkerNetwork::comm_recv(void *buf, int count, int src, int tag, comm_status
 	setmsg(tofind, src, NA, tag, NON_SYS, NA);
     printf("[pid:%d] start find env s:%d d:%d t:%d sys:%d sz:%d.\n", 
             pid, src, NA, tag, NON_SYS, NA);
+    printf("========queue size recv_msg_q:%d\n", recv_msg_q.size());
 	retpos = queue_find(recv_msg_q, tofind);
     printf("[pid:%d] have finished comm_recv queue_find.\n", pid);
 	memmove(buf, (*retpos)->msg, (*retpos)->size);
@@ -544,7 +545,7 @@ int WorkerNetwork::comm_recv(void *buf, int count, int src, int tag, comm_status
 	recv_msg_q.erase(retpos);
 	msg* delmsg = *retpos;
 	if(delmsg->msg) free(delmsg->msg);
-	if(delmsg) free(delmsg); delmsg = NULL;
+    if(delmsg) {free(delmsg); delmsg = NULL;}
 	pthread_mutex_unlock(&wmutex);
 	printf("[pid:%d] finished recv from %d, tag %d\n", pid, src, tag);
 }
@@ -624,6 +625,7 @@ void WorkerNetwork::process(int sys){
 }
 void WorkerNetwork::dealrecvzero(deque<msg*> &msg_queue, int srcrank, void* buff1, void* buff2, int recvsize){
 	if(errno != EAGAIN){
+        printf("[pid:%d] dealrecvzero errno = %s.\n",pid, strerror(errno));
 		msg toFind; IT pos;
 		setmsg(toFind, srcrank, NA, NA, NA, NA);
 		if(asynch_queue_find(pos, msg_queue, toFind) == 0){
@@ -651,11 +653,10 @@ void WorkerNetwork::comm_thread(){
     printf("[pid%d] IN THREAD begin thread.\n", pid);
 	int i, j, rc, n, destrank, printime = 0, new_st;
 	struct epoll_event event, *events;
-	msg *hsEnv;//handshake mes
 	efd = epoll_create(FD_SIZE);
 	events = (struct epoll_event*)calloc(MAXEVENTS, sizeof(struct epoll_event));
 	sockdata default_sd = {-listen_st-1, NULL, NULL, NULL, 0, 0, -1, 0, -1,-1};
-	event.data.ptr = &default_sd;
+	event.data.ptr = &default_sd; event.events = EPOLLIN;
 	safecall(epoll_ctl(efd, EPOLL_CTL_ADD, listen_st, &event));
 	if(C.pa != -1 && rc_list[C.pa] != -1)
 		event_op(efd, rc_list[C.pa], SD[C.pa], EPOLLIN, ADD);
@@ -667,20 +668,19 @@ void WorkerNetwork::comm_thread(){
 		n = epoll_wait(efd, events, MAXEVENTS, 0);
 		for(i = 0;i < n;i++){
 			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)){
-				int error = 0; socklen_t errlen = sizeof(error);
-				if(getsockopt(rc_list[((sockdata*)(events[i].data.ptr))->rank], SOL_SOCKET, SO_ERROR, (void *)&error, &errlen) == 0){
-					printf("[pid:%d] error = %s\n",pid, strerror(error));
-				}
+                int index = ((sockdata*)(events[i].data.ptr))->rank;
+                event_op(efd, rc_list[index], SD[index], EPOLLOUT|EPOLLIN, DEL);
+                printf("[pid:%d] EPOLLERR/EPOLLHUP pid = %d\n",pid, index);
 				continue;
 			}
 			else if(((sockdata*)(events[i].data.ptr))->rank < 0 && (events[i].events & EPOLLIN)){
-				hsEnv = (msg*)malloc(sizeof(msg));
+				msg* hsEnv = (msg*)malloc(sizeof(msg));
 				new_st = accept_worker();
 				read_env(new_st, hsEnv);
 				if(hsEnv->sys == HANDSHAKE){
 					if(hsEnv->src == C.rank){
 						rc_list[hsEnv->src] = new_st;
-						SD[C.rank] = initsockdata(C.rank);
+						//SD[C.rank] = initsockdata(C.rank);
 						event_op(efd, new_st, SD[C.rank], EPOLLIN, ADD);
 					}
 					else{
@@ -707,8 +707,11 @@ void WorkerNetwork::comm_thread(){
 					if(ptr->buffer_recv == NULL) head = (char*)malloc(50);
 					else head = ptr->buffer_recv;
 					readsize = read(rc_list[srcrank], head, 50 - recvheadsize);
-					if(readsize < 0)
-						dealrecvzero(recv_msg_q, srcrank, head, NULL, recvheadsize);
+                    if(readsize < 0){
+                        printf("[pid:%d] exit read head readsize<0 error:%s\n", strerror(errno));
+                        exit(99);
+                    }
+						//dealrecvzero(recv_msg_q, srcrank, head, NULL, recvheadsize);
 					else if(readsize == 0){
 						close(rc_list[srcrank]);
 						rc_list[srcrank] = -1;
@@ -721,24 +724,27 @@ void WorkerNetwork::comm_thread(){
 					}
 					else if(readsize == 50 - recvheadsize){
 						msg* envmsg = (msg*)malloc(sizeof(msg));//remember to free!!!!!
-						sscanf(head, "%010d%010d%010d%010d%010d", &envmsg->src, &envmsg->dest,
+						sscanf(head-recvheadsize, "%010d%010d%010d%010d%010d", &envmsg->src, &envmsg->dest,
 										           &envmsg->tag, &envmsg->sys, &envmsg->size);
 						printf("[pid:%d] recv s:%d d:%d t:%d sys:%d sz:%d\n",pid, envmsg->src, 
                                      envmsg->dest, envmsg->tag, envmsg->sys, envmsg->size);
-						process(envmsg->sys); if(head - recvheadsize) free(head - recvheadsize);
+						process(envmsg->sys);
+                        if(head - recvheadsize) free(head - recvheadsize);
 						if(envmsg->size > 0){
 							envmsg->msg = malloc(envmsg->size);//must to free!!!!
 							readsize = read(rc_list[srcrank], envmsg->msg, envmsg->size);
 							setsockdata_r(SD[srcrank], (char*)envmsg, (char*)envmsg->msg, 0, 0);
 							if(readsize < 0){
-								dealrecvzero(recv_msg_q, srcrank, envmsg->msg, envmsg, 0);
+                                printf("[pid:%d] exit read body readsize<0 error:%s\n", strerror(errno));
+                                exit(99);
+								//dealrecvzero(recv_msg_q, srcrank, envmsg->msg, envmsg, 0);
 							}
 							else if(readsize == 0){
 								close(rc_list[srcrank]);
 								rc_list[srcrank] = -1;
 								if(envmsg->msg) {free(envmsg->msg); envmsg->msg = NULL;}
 								if(envmsg) { free(envmsg); envmsg = NULL;}
-								printf("[pid:%d] noral closing %d when recv msg.\n", pid, srcrank);
+								printf("[pid:%d] normal closing %d when recv msg.\n", pid, srcrank);
 							}
 							else if(readsize < envmsg->size){
 								setsockdata_r(SD[srcrank], (char*)envmsg, (char*)envmsg->msg, envmsg->size, readsize);
@@ -753,13 +759,6 @@ void WorkerNetwork::comm_thread(){
 															 pid, envmsg->src, envmsg->size);
 							}
 						}
-						else{
-							pthread_mutex_lock(&wmutex);
-							recv_msg_q.push_back(envmsg);	
-							pthread_mutex_unlock(&wmutex);
-							setsockdata_r(SD[srcrank], NULL, NULL, -1, 0);
-							printf("[pid:%d] push the msg with size=0 in to queue.\n", pid);
-						}
 					}	
 				}
 				else{
@@ -767,8 +766,11 @@ void WorkerNetwork::comm_thread(){
                     int totalsize_r = ptr->totalsize_r;
                     int recvmsgsize = ptr->haverecvsize;
                     int readsize = read(rc_list[srcrank], _msg, totalsize_r - recvmsgsize);    
-                    if(readsize < 0)
-                        dealrecvzero(recv_msg_q, srcrank, _msg, ptr->buffer_recv_withead, recvmsgsize);
+                    if(readsize < 0){
+                        printf("[pid:%d] exit read left readsize<0 error:%s\n", strerror(errno));
+                        exit(99);
+                    }
+                        //dealrecvzero(recv_msg_q, srcrank, _msg, ptr->buffer_recv_withead, recvmsgsize);
                     else if(readsize == 0){
                         close(rc_list[srcrank]);
                         rc_list[srcrank] = -1;
@@ -808,17 +810,13 @@ void WorkerNetwork::comm_thread(){
             msg* msgPtr = (msg*)((*isendpos)->msg);
             int destofrank = msgPtr->dest;
             if(SD[destofrank]->buffer_send == NULL){
-                pthread_mutex_lock(&wmutex);
-                send_msg_q.erase(isendpos);
-                act_isends--;
-                pthread_mutex_unlock(&wmutex);
                 char *sendmsg = construct_sendmsg(destofrank, msgPtr->tag, NON_SYS, msgPtr->size, (char*)msgPtr->msg);
                 //释放isendpos指向的
                 int totalsize = 50;
                 if(msgPtr->size > 0) totalsize += msgPtr->size; 
                 int sendsize = write(sc_list[destofrank], sendmsg, totalsize);
                 if(sendsize < 0){
-                    if(errno != EAGAIN) perror("sendmsg error");
+                    if(errno != EAGAIN && errno != EINTR) perror("sendmsg error");
                     else{
                         setsockdata_s(SD[destofrank], sendmsg, totalsize, totalsize, (*isendpos)->tag, msgPtr->tag);
                         if(destofrank != C.rank)
@@ -844,6 +842,10 @@ void WorkerNetwork::comm_thread(){
                 }
                 if(msgPtr) {free(msgPtr); msgPtr=NULL;}
                 if((*isendpos)) {free((*isendpos)); (*isendpos) = NULL;}
+                pthread_mutex_lock(&wmutex);
+                send_msg_q.erase(isendpos);
+                act_isends--;
+                pthread_mutex_unlock(&wmutex);
             }
         }
         if(act_irecvs > 0){
@@ -871,7 +873,8 @@ void WorkerNetwork::comm_thread(){
 void WorkerNetwork::send_partmsg(int efd, char* sendmsg, int totalsize_s, int restsendsize, int destofrank, int handle_s, int tag_s ){
 	int sendsize = write(sc_list[destofrank], sendmsg, restsendsize);
 	if(sendsize < 0){
-		if(errno != EAGAIN) perror("sendmsg error");
+		if(errno == EAGAIN || errno == EINTR) return;
+        else perror("sendmsg error");
 	}
 	else if(sendsize == restsendsize)//set buffer_send null & remove epollout
     {
