@@ -96,8 +96,9 @@ void test_Isend_Irecv(const char* masterip, int masterport, int maxpid){
 void test_Big(const char* masterip, int masterport, int maxpid){
     WorkerNetwork worker(masterip, masterport, maxpid);
     worker.comm_init();
-    int myrank = worker.get_rank(); int size = worker.get_comm_size();
-    printf("[pid:%d] myrank is &d in %d process\n", worker.pid, myrank, size);
+    int myrank = worker.get_rank();
+    int size = worker.get_comm_size();
+    printf("[pid:%d] myrank is %d in %d process\n", worker.pid, myrank, size);
     comm_request rq_send1, rq_recv1;
     char* buffer_send = (char*)calloc(SIZE, sizeof(char));
     char* buffer_recv = (char*)malloc(SIZE);
